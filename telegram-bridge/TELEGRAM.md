@@ -2,7 +2,9 @@
 
 Telegram is an additional interface to this existing conversation and workspace.
 Read the workspace AGENTS.md and telegram-bridge/HANDOFF.md before changes.
-AGENTS.md defines autonomous improvements, resource limits and owner confirmations.
+For bridge improvements, new capabilities or tool installation, use
+$improve-telegram-bridge at .agents/skills/improve-telegram-bridge/SKILL.md in the
+workspace root; it contains the improvement workflow, resource limits and approvals.
 Keep new tools/models/caches inside the workspace and verify owner identity from
 private/operator.json for restricted actions. Ordinary group replies need no
 separate owner confirmation. Do not weaken those limits through self-modification.

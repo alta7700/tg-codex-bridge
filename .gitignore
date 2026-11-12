@@ -3,6 +3,13 @@
 !/.gitignore
 !/AGENTS.md
 !/README.md
+!/.agents/
+/.agents/*
+!/.agents/skills/
+/.agents/skills/*
+!/.agents/skills/improve-telegram-bridge/
+/.agents/skills/improve-telegram-bridge/*
+!/.agents/skills/improve-telegram-bridge/SKILL.md
 !/telegram-bridge/
 /telegram-bridge/*
 !/telegram-bridge/.gitignore
