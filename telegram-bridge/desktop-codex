@@ -1,0 +1,4 @@
+#!/bin/zsh
+set -euo pipefail
+BRIDGE_DIR="${0:A:h}"
+exec "$BRIDGE_DIR/.venv/bin/python" -m tg_bridge.desktop_host "$@"
