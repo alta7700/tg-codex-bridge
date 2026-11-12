@@ -71,6 +71,14 @@ def send_file():
     _send(file=True)
 
 
+def ignore():
+    parser = ipc_parser()
+    parser.add_argument('--message-id',type=int,required=True)
+    parser.add_argument('--reason',default='')
+    args = parser.parse_args()
+    ipc_request(args,{'op':'ignore','chat_id':args.chat_id,'message_id':args.message_id,'reason':args.reason})
+
+
 def history():
     parser = ipc_parser()
     parser.add_argument('--limit',type=int,default=50)
@@ -131,7 +139,8 @@ def main():
                     # Status works before and after the additive lifecycle migration.
                     columns = {r['name'] for r in db.execute('PRAGMA table_info(inbox)')}
                     wanted = ['seq','message','status','turn','error','dispatch_state','reminder_state',
-                              'processing_at','reminded_at','deadline_at','replied_at','reaction','reaction_error']
+                              'processing_at','reminded_at','deadline_at','replied_at','resolution','ignored_at',
+                              'ignore_reason','reaction','reaction_error']
                     selected = ','.join(k for k in wanted if k in columns)
                     print(json.dumps({'inbox':[dict(r) for r in db.execute(f'SELECT {selected} FROM inbox ORDER BY seq')],
                         'outbox':[dict(r) for r in db.execute('SELECT id,status,error FROM outbox')],

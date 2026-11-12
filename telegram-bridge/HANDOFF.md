@@ -1,6 +1,8 @@
 # Передача работы следующему чату
 
-Сначала прочитай корневой AGENTS.md, затем TELEGRAM.md. В этом workspace уже есть
+Сначала прочитай корневой AGENTS.md, затем TELEGRAM.md.
+После каждого compact перечитай AGENTS.md, TELEGRAM.md и этот HANDOFF.md;
+напоминание об этом сохраняй в контексте. В этом workspace уже есть
 работающий мост; не пересоздавай окружение, бота или чат. История предыдущего
 разработчика не требуется для работы. Локальная `.env` хранит привязку,
 `private/operator.json` — проверяемую личность владельца; оба файла исключены из Git.
@@ -20,7 +22,8 @@
 
 doctor проверяет App Server и наличие send_message_to_thread в codex_app.
 status показывает durable inbox/outbox; successful turn сам по себе не означает
-ответ в Telegram. Локальные ID и сокеты узнавай из результата doctor/status.
+ответ в Telegram. Вход также можно осознанно закрыть без ответа через tg-ignore;
+resolution в истории различает ignored и replied. Локальные ID и сокеты узнавай из результата doctor/status.
 Не копируй их в Git или публичный issue. Полная локальная история прежней
 диагностики, если понадобится, сохранена в `.state/README-local-diagnostics-before-git.md`.
 
@@ -49,10 +52,11 @@ manage.sh управляет только процессом `tg-bridge run`, к
 
 ## Что уже проверено
 
-- Полный цикл: Telegram input → Codex → tg-send reply → история → processed → 👍.
+- Полный цикл: Telegram input → Codex → reply или tg-ignore → processed → 👍.
+  История отличает replied/ignored; ignore не создаёт исходящий текст.
 - tg-history, вложения/reply context, FIFO до доставки, start/steer и гонки.
 - Чужому чату отвечает сам мост: «чат {id} не разрешен»; Codex не вызывается.
-- Поздний reply меняет failed на processed. Напоминание через 5 минут одно,
+- Поздний reply или ignore меняет failed на processed. Напоминание через 5 минут одно,
   ещё через 5 минут — failed; этот статус означает отсутствие ответа.
 - Сжатие большого контекста снова работает; codex_app доступен.
 - Штатный профиль :workspace сохранён, старый override never снят через

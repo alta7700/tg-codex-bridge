@@ -1,8 +1,8 @@
 # Telegram ↔ Codex Desktop bridge
 
 Локальный мост для одного Telegram-чата, существующего чата Codex Desktop и
-одного workspace. Бот принимает сообщения/вложения, агент явно отвечает через
-CLI. Исходники находятся в этом каталоге; рабочие данные хранятся отдельно от Git.
+одного workspace. Бот принимает сообщения/вложения; агент отвечает через CLI или отмечает
+сообщение как не требующее ответа через tg-ignore. Исходники находятся в этом каталоге; рабочие данные хранятся отдельно от Git.
 
 ## Установка и привязка
 
@@ -80,12 +80,14 @@ send_message_to_thread: одного успешного RPC-соединения
   Пока раннее вложение грузится, последующие входы не доставляются агенту.
 - После доставки вход становится processing; следующий вход не ждёт ответа.
   Несколько сообщений могут обрабатываться в одном turn.
-- Только подтверждённый Telegram reply переводит вход в processed. Раннее
-  «нужно время» тоже считается ответом, а не окончанием исследования.
-  Сообщение без reply и завершение Codex turn не закрывают вход.
-- Через 5 минут без reply один раз доставляется «напоминаю, если забыл»;
+- Подтверждённый Telegram reply либо явный tg-ignore переводят вход в processed.
+  Раннее «нужно время» тоже считается ответом, а не окончанием исследования.
+  resolution=replied/ignored различает способы обработки; ignore не создаёт
+  исходящего сообщения и не заполняет replied_at. Сообщение без reply и завершение
+  Codex turn сами по себе не закрывают вход.
+- Через 5 минут без reply/ignore один раз доставляется «напоминаю, если забыл»;
   ещё через 5 минут вход становится failed. Общий turn не прерывается.
-  Таймеры durable; поздний reply меняет failed на processed.
+  Таймеры durable; поздний reply или ignore меняет failed на processed.
 - Мост сам ставит 👀, 👍 и 👎. Ошибка реакции не повторяет отправку ответа.
   Первая подтверждённая часть длинного reply уже считается ответом.
 
@@ -112,6 +114,8 @@ approval policy, cwd или runtime workspace roots чата. Подробнос
   --reply-to MESSAGE_ID --request-id UNIQUE_ID --text 'Нужно время: проверяю'
 .venv/bin/tg-send-file --socket SOCKET --chat-id CHAT_ID \
   --reply-to MESSAGE_ID --file output/telegram/report.txt
+.venv/bin/tg-ignore --socket SOCKET --chat-id CHAT_ID \
+  --message-id MESSAGE_ID --reason 'переписка между участниками'
 .venv/bin/tg-history --socket SOCKET --chat-id CHAT_ID --limit 50
 .venv/bin/tg-history --socket SOCKET --chat-id CHAT_ID --message-id MESSAGE_ID
 ```
@@ -122,8 +126,15 @@ approval policy, cwd или runtime workspace roots чата. Подробнос
 передача использует закреплённый file descriptor. Производные отчёты удобно класть
 в output/telegram; это не ограничение записи кода/других файлов workspace.
 
+tg-ignore применяется только к известному входу разрешённого чата; команда
+идемпотентна по message_id, очищает таймер ожидания и ставит 👍 через мост. Причина
+до 500 символов и ignored_at сохраняются локально. Повтор не меняет первое решение;
+уже подтверждённый reply не превращается в ignored. После ignore можно ответить
+позже: resolution станет replied, сохранив сведения о прежнем ignore.
+
 История содержит принятые входы и подтверждённые исходящие тексты/файлы, ID,
-авторов (user_id, имя, username/mention), reply context и статусы. Поддерживаются
+авторов (user_id, имя, username/mention), reply context, статусы и resolution.
+Для игнорирования доступны ignored_at/ignore_reason, для ответа — replied_at. Поддерживаются
 --before-message-id, --after-message-id, --status; JSON возвращает next_cursor и
 cursor_direction. Произвольная старая переписка Telegram не загружается.
 В событие reply сразу включены автор и текст/подпись оригинала, один уровень;
@@ -182,7 +193,7 @@ SQLite мигрируется добавлением полей. При снят
 .venv/bin/pytest -q
 ```
 
-Последний полный прогон: 72 теста прошли.
+Последний полный прогон: 78 тестов прошли.
 
 Проверены FIFO с загрузкой/повторами, lifecycle, обе turn-гонки, виртуальные таймеры
 5+5, ACK loss/restart, IPC и CLI ошибки, reply/history/reactions, границы файлов,

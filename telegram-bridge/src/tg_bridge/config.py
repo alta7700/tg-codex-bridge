@@ -80,6 +80,6 @@ class Config:
         instructions = (self.root / "TELEGRAM.md").read_text()
         instructions += (f"\nWorkspace: {self.workspace}\nSuggested report directory: {self.output}\n"
                          f"Incoming attachments: {self.attachments}\nAllowed chat_id: {self.chat_id}\n"
-                         f"CLI: {self.root / '.venv/bin/tg-send'}, {self.root / '.venv/bin/tg-send-file'}, {self.root / '.venv/bin/tg-history'}\n"
+                         f"CLI: {self.root / '.venv/bin/tg-send'}, {self.root / '.venv/bin/tg-send-file'}, {self.root / '.venv/bin/tg-history'}, {self.root / '.venv/bin/tg-ignore'}\n"
                          f"Pass --socket {self.socket} to each CLI invocation.\n")
         return {"developerInstructions": instructions}

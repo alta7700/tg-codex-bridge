@@ -278,6 +278,11 @@ class Bridge:
                         raise ValueError('Unsupported history fields')
                     result = self.store.history(self.cfg.chat_id,**{k:v for k,v in payload.items() if k not in {'op','chat_id'}})
                     response = {'ok':True,**result}
+                elif payload.get('op')=='ignore':
+                    if set(payload)-{'op','chat_id','message_id','reason'}:
+                        raise ValueError('Unsupported ignore fields')
+                    result=self.store.ignore(self.cfg.chat_id,payload.get('message_id'),payload.get('reason',''))
+                    response={'ok':True,**result}
                 else:
                     ids = await self.sender.deliver('cli-'+key,payload)
                     response = {'ok':True,'message_ids':ids}

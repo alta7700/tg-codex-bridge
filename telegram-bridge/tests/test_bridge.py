@@ -359,6 +359,95 @@ async def test_history_pagination_and_per_message_status(cfg,store):
     assert store.history(cfg.chat_id,message_id=2)['messages'][0]['replied_at'] is not None
 
 
+async def test_ignore_is_durable_without_reply_or_reminder(cfg,store,clock):
+    bridge=make_bridge(cfg,store)
+    await ready(bridge,text='conversation between people');await bridge.dispatch_once()
+    result=store.ignore(cfg.chat_id,1,'addressed to another participant')
+    ignored_at=result['ignored_at']
+    assert result['status']=='processed' and result['resolution']=='ignored' and result['changed']
+    assert store.row(1)['deadline_at'] is None and store.row(1)['replied_at'] is None
+    clock.advance(601)
+    again=store.ignore(cfg.chat_id,1,'another reason')
+    assert not again['changed'] and again['ignored_at']==ignored_at
+    await bridge.watchdog_once();await bridge.reactions_once()
+    assert len(bridge.rpc.deliveries())==1
+    bridge.bot.send_message.assert_not_awaited()
+    assert bridge.bot.set_message_reaction.call_args.kwargs['reaction'][0].emoji=='👍'
+    history=store.history(cfg.chat_id)['messages']
+    assert len(history)==1 and history[0]['direction']=='in'
+    assert history[0]['resolution']=='ignored' and history[0]['replied_at'] is None
+    assert history[0]['ignore_reason']=='addressed to another participant'
+    assert store.db.execute('SELECT count(*) FROM outbox').fetchone()[0]==0
+
+
+async def test_late_reply_after_ignore_and_ignore_after_reply_preserve_truth(cfg,store):
+    bridge=make_bridge(cfg,store);await ready(bridge,text='first')
+    store.ignore(cfg.chat_id,1)
+    await bridge.sender.deliver('reply-later',{'op':'text','chat_id':cfg.chat_id,'reply_to':1,'text':'answer'})
+    result=store.ignore(cfg.chat_id,1,'do not overwrite delivered reply')
+    assert not result['changed'] and result['resolution']=='replied'
+    history=store.history(cfg.chat_id,message_id=1)['messages'][0]
+    assert history['resolution']=='replied' and history['replied_at'] is not None
+    assert history['ignored_at'] is not None
+
+
+def test_ignore_rejects_unknown_messages_and_invalid_arguments(cfg,store):
+    for mid,reason in [(999,''),(True,''),(0,''),('1',''),(1,None),(1,'x'*501)]:
+        with pytest.raises(ValueError):store.ignore(cfg.chat_id,mid,reason)
+    store.ingest(1,message(text='known'))
+    with pytest.raises(ValueError):store.ignore(123,1)
+    assert store.row(1)['status']=='queued'
+
+
+async def test_ignore_before_dispatch_ack_does_not_reopen_processing(cfg,store):
+    bridge=make_bridge(cfg,store);await ready(bridge,text='one')
+    store.update(1,dispatch_state='inflight')
+    store.ignore(cfg.chat_id,1)
+    store.delivered_input(1,'accepted-turn')
+    store.delivered_input(1,'reminded-turn',reminder=True)
+    assert store.row(1)['status']=='processed' and store.row(1)['resolution']=='ignored'
+    assert store.row(1)['deadline_at'] is None
+
+
+async def test_ignore_failed_input_survives_restart_and_reply_resolution_migrates(cfg,clock):
+    path=cfg.state/'ignore-restart.sqlite3';state=Store(path,clock);bridge=make_bridge(cfg,state)
+    try:
+        await ready(bridge,1,text='ignored');await ready(bridge,2,text='replied')
+        state.transition(1,'failed',reason='previous unanswered input')
+        state.ignore(cfg.chat_id,1,'not for bot')
+        await bridge.sender.deliver('ack',{'op':'text','chat_id':cfg.chat_id,'reply_to':2,'text':'ack'})
+        with state.db:state.db.execute('UPDATE inbox SET resolution=NULL WHERE message=2')
+        state.close();state=Store(path,clock)
+        assert state.row(1)['resolution']=='ignored' and state.row(1)['replied_at'] is None
+        assert state.row(2)['resolution']=='replied' and state.row(2)['ignored_at'] is None
+    finally:state.close()
+
+
+async def test_ignore_cli_over_real_ipc_and_destination_guard(cfg,store):
+    bridge=make_bridge(cfg,store);await ready(bridge,text='not addressed to bot')
+    server=await asyncio.start_unix_server(bridge.ipc,str(cfg.socket))
+    async def command(chat,mid):
+        process=await asyncio.create_subprocess_exec(sys.executable,'-c',
+            'from tg_bridge.cli import ignore;ignore()',
+            '--socket',str(cfg.socket),'--chat-id',str(chat),'--message-id',str(mid),
+            '--request-id','ignore-cli-test','--reason','another participant',
+            stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+        output,_=await asyncio.wait_for(process.communicate(),5)
+        return process.returncode,json.loads(output)
+    try:
+        code,result=await command(123,1)
+        assert code==1 and not result['ok'] and store.row(1)['status']=='ready'
+        code,result=await command(cfg.chat_id,999)
+        assert code==1 and not result['ok']
+        code,result=await command(cfg.chat_id,1)
+        assert code==0 and result['ok'] and result['resolution']=='ignored'
+        code,result=await command(cfg.chat_id,1)
+        assert code==0 and not result['changed']
+        bridge.bot.send_message.assert_not_awaited()
+    finally:
+        server.close();await server.wait_closed();cfg.socket.unlink(missing_ok=True)
+
+
 async def test_restart_preserves_deadline_and_uncertain_send(cfg,clock):
     path=cfg.state/'restart.sqlite3';store=Store(path,clock);bridge=make_bridge(cfg,store)
     await ready(bridge,text='one');await bridge.dispatch_once()

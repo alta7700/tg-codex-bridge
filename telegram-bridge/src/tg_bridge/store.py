@@ -40,6 +40,7 @@ class Store:
         additions = {
             'created_at': 'REAL', 'updated_at': 'REAL', 'processing_at': 'REAL',
             'reminded_at': 'REAL', 'deadline_at': 'REAL', 'replied_at': 'REAL',
+            'resolution': 'TEXT', 'ignored_at': 'REAL', 'ignore_reason': 'TEXT',
             'dispatch_state': "TEXT NOT NULL DEFAULT 'idle'", 'reminder_state': "TEXT NOT NULL DEFAULT 'idle'",
             'dispatch_at': 'REAL', 'reminder_at': 'REAL', 'attempts': 'INTEGER NOT NULL DEFAULT 0',
             'download_retry_at': 'REAL', 'reaction': "TEXT NOT NULL DEFAULT ''",
@@ -51,6 +52,7 @@ class Store:
             now = self.clock()
             self.db.execute('UPDATE inbox SET created_at=COALESCE(created_at,?),updated_at=COALESCE(updated_at,?)', (now, now))
             self.db.execute("UPDATE inbox SET status='processed',reaction='👍',reaction_dirty=1 WHERE status='done'")
+            self.db.execute("UPDATE inbox SET resolution='replied' WHERE status='processed' AND replied_at IS NOT NULL AND resolution IS NULL")
             self.db.execute("UPDATE inbox SET status='processing',reaction='👀',reaction_dirty=1,processing_at=?,deadline_at=? WHERE status='running'", (now, now+300))
             self.db.execute("UPDATE inbox SET status='ready',dispatch_state='uncertain' WHERE status IN ('starting','uncertain')")
             self.db.execute("UPDATE inbox SET dispatch_state='uncertain' WHERE dispatch_state='inflight'")
@@ -126,6 +128,7 @@ class Store:
 
     def _update(self, seq, values):
         allowed = {'event','status','turn','error','updated_at','processing_at','reminded_at','deadline_at','replied_at',
+                   'resolution','ignored_at','ignore_reason',
                    'dispatch_state','reminder_state','dispatch_at','reminder_at','attempts','download_retry_at',
                    'reaction','reaction_dirty','reaction_error','reaction_retry_at'}
         if not values or not set(values) <= allowed:
@@ -209,6 +212,24 @@ class Store:
             self.db.execute('UPDATE outbox SET status=?,result=?,error=? WHERE id=?',
                             (status,json.dumps(result) if result is not None else None,error,key))
 
+    def ignore(self, chat, message_id, reason=''):
+        """Idempotently acknowledge a known input without pretending to send a reply."""
+        if type(message_id) is not int or message_id<=0:
+            raise ValueError('message_id must be a positive integer')
+        if not isinstance(reason,str) or len(reason)>500:
+            raise ValueError('Ignore reason must be text up to 500 characters')
+        with self.db:
+            row=self.db.execute('SELECT * FROM inbox WHERE chat=? AND message=?',(chat,message_id)).fetchone()
+            if row is None:
+                raise ValueError('Unknown incoming message in this chat')
+            changed=row['status']!='processed'
+            if changed:
+                self._transition(row['seq'],'processed',reason='Agent acknowledged without a reply',
+                    resolution='ignored',ignored_at=self.clock(),ignore_reason=reason,deadline_at=None,error=None)
+            result=self.row(row['seq'])
+            return {'message_id':message_id,'status':result['status'],'resolution':result['resolution'],
+                    'ignored_at':result['ignored_at'],'changed':changed}
+
     def record_fragment(self, key, part, message_id, payload, text='', attachments=None, sender=None):
         # Telegram success receipt, history and processed status commit atomically.
         with self.db:
@@ -223,7 +244,8 @@ class Store:
             if payload.get('reply_to'):
                 row = self.db.execute('SELECT * FROM inbox WHERE chat=? AND message=?', (payload['chat_id'],payload['reply_to'])).fetchone()
                 if row:
-                    self._transition(row['seq'],'processed',reason='Telegram reply delivered',replied_at=self.clock(),deadline_at=None,error=None)
+                    self._transition(row['seq'],'processed',reason='Telegram reply delivered',
+                        resolution='replied',replied_at=self.clock(),deadline_at=None,error=None)
 
     def history(self, chat, limit=50, before=None, after=None, message_id=None, status=None):
         if not isinstance(limit,int) or not 1 <= limit <= 100:
@@ -237,7 +259,7 @@ class Store:
             if value is not None:
                 clauses.append(expression);values.append(value)
         ascending = after is not None
-        sql = ('SELECT m.*,i.status,i.error,i.processing_at,i.reminded_at,i.replied_at,i.dispatch_state,i.reminder_state FROM messages m '
+        sql = ('SELECT m.*,i.status,i.error,i.processing_at,i.reminded_at,i.replied_at,i.resolution,i.ignored_at,i.ignore_reason,i.dispatch_state,i.reminder_state FROM messages m '
                'LEFT JOIN inbox i ON i.chat=m.chat AND i.message=m.message WHERE '+' AND '.join(clauses)+
                ' ORDER BY m.message '+('ASC' if ascending else 'DESC')+' LIMIT ?')
         rows = self.db.execute(sql,(*values,limit+1)).fetchall()
@@ -247,7 +269,8 @@ class Store:
             rows.reverse()
         messages = [{**json.loads(r['event']), 'direction':r['direction'],'status':r['status'],
                      'error':r['error'],'processing_at':r['processing_at'],'reminded_at':r['reminded_at'],
-                     'replied_at':r['replied_at'],'delivery_state':r['dispatch_state'],'reminder_state':r['reminder_state']} for r in rows]
+                     'replied_at':r['replied_at'],'resolution':r['resolution'],'ignored_at':r['ignored_at'],
+                     'ignore_reason':r['ignore_reason'],'delivery_state':r['dispatch_state'],'reminder_state':r['reminder_state']} for r in rows]
         return {'messages':messages,'has_more':more,'next_cursor':(rows[-1 if ascending else 0]['message'] if rows and more else None),
                 'cursor_direction':'after' if ascending else 'before','scope':'locally received messages and confirmed bot sends'}
 

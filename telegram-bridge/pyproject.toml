@@ -10,6 +10,7 @@ tg-bridge = "tg_bridge.cli:main"
 tg-send = "tg_bridge.cli:send"
 tg-send-file = "tg_bridge.cli:send_file"
 tg-history = "tg_bridge.cli:history"
+tg-ignore = "tg_bridge.cli:ignore"
 
 [build-system]
 requires = ["hatchling"]
