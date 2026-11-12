@@ -140,6 +140,71 @@ async def test_foreign_chat_gets_fixed_notice_without_blocking_allowed_intake(cf
     assert not cfg.authorized(-1001,None)
 
 
+@pytest.mark.parametrize('sender_id,from_kind,user_filter',[
+    (-1001,'fake',False),(-1001,'absent',False),(-2002,'fake',False),
+    (-1001,'fake',True),(-1001,'owner',True),
+])
+async def test_send_as_chat_intake_preserves_anonymous_identity(cfg,store,sender_id,from_kind,user_filter):
+    from dataclasses import replace
+    from aiogram.types import Update
+    config=replace(cfg,user_ids=cfg.user_ids if user_filter else frozenset())
+    sender={'id':sender_id,'type':'supergroup' if sender_id==cfg.chat_id else 'channel',
+            'title':'Published author','username':'published_author'}
+    incoming=message(1,text='Anonymous request',sender_chat=sender,author_signature='Administrator',
+        **{'from':None if from_kind=='absent' else
+           {'id':7 if from_kind=='owner' else 1087968824,'is_bot':from_kind!='owner','first_name':'Placeholder'}})
+    next_poll=asyncio.Event()
+    batches=0
+    async def updates(**kwargs):
+        nonlocal batches
+        batches+=1
+        if batches==1:return [Update(update_id=1,message=incoming)]
+        next_poll.set();await asyncio.Future()
+    bridge=make_bridge(config,store)
+    bridge.bot.get_updates=updates
+    task=asyncio.create_task(bridge.poll())
+    try:await asyncio.wait_for(next_poll.wait(),2)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):await task
+    assert store.get('offset')=='2'
+    if user_filter:
+        assert store.head() is None
+        return
+    queued=store.history(cfg.chat_id)['messages'][0]
+    assert queued['user_id'] is None
+    assert queued['author']['type']=='chat' and queued['author']['chat_id']==sender_id
+    assert queued['sender']=='Published author' and queued['mention']=='@published_author'
+    assert queued['author']['signature']=='Administrator'
+    await bridge.download_once();await bridge.dispatch_once();await bridge.reactions_once()
+    event=json.loads(bridge.rpc.deliveries()[0][1]['input'][0]['text'].split('\n',1)[1])
+    assert event['user_id'] is None and event['author']['type']=='chat'
+    assert bridge.bot.set_message_reaction.call_args.kwargs['reaction'][0].emoji=='👀'
+    assert store.row(1)['reaction_dirty']==0
+
+
+async def test_foreign_send_as_chat_is_denied_without_codex(cfg,store):
+    from aiogram.types import Update
+    incoming=message(1,text='Foreign anonymous input',
+        chat={'id':-2002,'type':'supergroup','title':'Foreign'},
+        sender_chat={'id':-2002,'type':'supergroup','title':'Foreign'},**{'from':None})
+    next_poll=asyncio.Event();batches=0
+    async def updates(**kwargs):
+        nonlocal batches
+        batches+=1
+        if batches==1:return [Update(update_id=1,message=incoming)]
+        next_poll.set();await asyncio.Future()
+    bridge=make_bridge(cfg,store);bridge.bot.get_updates=updates
+    task=asyncio.create_task(bridge.poll())
+    try:await asyncio.wait_for(next_poll.wait(),2)
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):await task
+    assert store.head() is None and bridge.rpc.requests==[]
+    assert bridge.bot.send_message.call_args.kwargs['text']=='чат -2002 не разрешен'
+    assert store.get('offset')=='2'
+
+
 def test_durable_queue_offset_and_dedup(store):
     store.ingest(12,message(text='one'));store.ingest(12,message(text='one'));store.ingest(13,message(2,text='two'))
     assert store.get('offset')=='14'

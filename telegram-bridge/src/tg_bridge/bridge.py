@@ -52,8 +52,10 @@ class Bridge:
                     if update.update_id < int(self.store.get('offset','0')):
                         continue
                     message = update.message
+                    sender_chat = message.sender_chat if message else None
                     human = message and message.from_user and not message.from_user.is_bot
-                    if human and message.chat.id != self.cfg.chat_id:
+                    candidate = sender_chat is not None or human
+                    if candidate and message.chat.id != self.cfg.chat_id:
                         try:
                             await self.bot.send_message(chat_id=message.chat.id,
                                 text=f'чат {message.chat.id} не разрешен',request_timeout=5,
@@ -64,7 +66,11 @@ class Bridge:
                             # A foreign chat's permissions/rate limit/network failure
                             # must not block the allowed chat or trigger Codex work.
                             log.warning('Unauthorized chat notice unavailable (%s)',type(error).__name__)
-                    allowed = human and self.cfg.authorized(message.chat.id,message.from_user.id)
+                    # Anonymous admins / send-as-chat messages carry a fake bot user.
+                    # That user cannot establish personal identity or pass a user allowlist.
+                    allowed = (message.chat.id == self.cfg.chat_id and not self.cfg.user_ids
+                               if sender_chat is not None else
+                               human and self.cfg.authorized(message.chat.id,message.from_user.id))
                     self.store.ingest(update.update_id,message if allowed else None)
                 backoff = 1
             except asyncio.CancelledError:
