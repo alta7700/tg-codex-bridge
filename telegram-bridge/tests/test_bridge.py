@@ -214,6 +214,43 @@ def test_durable_queue_offset_and_dedup(store):
     store.transition(1,'processed');assert store.head()['message']==2
 
 
+@pytest.mark.parametrize('preview_in_reply',[False,True])
+async def test_link_preview_intake_download_and_following_message(cfg,store,preview_in_reply):
+    preview={'url':'https://example.org/page','prefer_small_media':False,
+             'prefer_large_media':True,'show_above_text':False}
+    linked=message(10,text='Linked page',link_preview_options=preview)
+    incoming=(message(11,text='Question about the link',reply_to_message=linked)
+              if preview_in_reply else linked)
+    bridge=make_bridge(cfg,store)
+    store.ingest(100,incoming)
+    store.ingest(101,message(12,text='Following message'))
+    store.ingest(100,incoming)
+    rows=store.db.execute('SELECT * FROM inbox ORDER BY seq').fetchall()
+    assert len(rows)==2 and store.get('offset')=='102'
+    raw=json.loads(rows[0]['raw'])
+    linked_raw=raw['reply_to_message'] if preview_in_reply else raw
+    assert linked_raw['link_preview_options']==preview
+    assert raw['text']==incoming.text
+    assert rows[0]['created_at']==store.clock()
+    await bridge.download_once()
+    await bridge.download_once()
+    await bridge.dispatch_once()
+    await bridge.dispatch_once()
+    deliveries=bridge.rpc.deliveries()
+    assert len(deliveries)==2
+    first=json.loads(deliveries[0][1]['input'][0]['text'].split('\n',1)[1])
+    second=json.loads(deliveries[1][1]['input'][0]['text'].split('\n',1)[1])
+    assert first['message_id']==incoming.message_id and first['text']==incoming.text
+    assert first['user_id']==7
+    if preview_in_reply:
+        assert first['reply_to']['message_id']==10
+        assert first['reply_to']['text']=='Linked page'
+        assert first['reply_to']['author']['user_id']==7
+    else:
+        assert first['reply_to_message_id'] is None
+    assert second['text']=='Following message'
+
+
 def test_migrate_original_database_without_replaying_running(cfg,clock):
     path=cfg.state/'legacy.sqlite3';db=sqlite3.connect(path)
     db.executescript('''CREATE TABLE inbox(seq INTEGER PRIMARY KEY,chat INTEGER,message INTEGER,raw TEXT,event TEXT,status TEXT,turn TEXT,error TEXT,UNIQUE(chat,message));''')

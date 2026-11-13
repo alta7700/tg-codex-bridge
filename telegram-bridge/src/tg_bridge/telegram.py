@@ -69,7 +69,9 @@ def export_bytes(workspace: Path, path: str, denied_roots=()):
 
 async def download_event(bot, cfg, raw):
     message = Message.model_validate_json(raw)
-    event = message_event(message.model_dump(mode='json',by_alias=True))
+    # Validation restores SDK defaults; use the stored JSON for metadata rather
+    # than serializing those defaults again (notably inside reply previews).
+    event = message_event(json.loads(raw))
     media = []
     if message.photo:
         media.append(('photo',message.photo[-1],'.jpg'))

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import time
+from aiogram.utils.serialization import deserialize_telegram_object_to_python
 from .events import event_from_raw, quoted_message
 
 STATUSES = {'queued', 'downloading', 'ready', 'processing', 'processed', 'failed'}
@@ -104,11 +105,13 @@ class Store:
     def ingest(self, update_id, message=None):
         with self.db:
             if message:
+                # Reply/link previews can contain SDK Default sentinels.
+                raw = json.dumps(deserialize_telegram_object_to_python(message),ensure_ascii=False)
                 now = self.clock()
                 result = self.db.execute('INSERT OR IGNORE INTO inbox(chat,message,raw,created_at,updated_at) VALUES (?,?,?,?,?)',
-                    (message.chat.id, message.message_id, message.model_dump_json(), now, now))
+                    (message.chat.id, message.message_id, raw, now, now))
                 if result.rowcount:
-                    self._save_message(message.chat.id, message.message_id, 'in', self._raw_event(message.model_dump_json()))
+                    self._save_message(message.chat.id, message.message_id, 'in', self._raw_event(raw))
                     self.db.execute("INSERT INTO lifecycle(seq,status,at) VALUES (?,'queued',?)", (result.lastrowid, now))
             offset = max(int(self.get('offset', '0')), update_id+1)
             self.db.execute("INSERT OR REPLACE INTO meta VALUES ('offset',?)", (str(offset),))
