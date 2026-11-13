@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#f5f3ee">
+  <title>Материалы дела</title>
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="assets/style.css">
+  <script src="assets/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">К содержанию</a>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand" href="#hearing"><span class="brand-mark" aria-hidden="true">С</span><span>Материалы дела<small id="brand-subtitle">Рабочая подборка</small></span></a>
+      <p class="nav-label">Работа с материалами</p>
+      <nav aria-label="Разделы">
+        <a href="#hearing" data-nav="hearing">Допрос</a>
+        <a href="#questions" data-nav="questions">Все вопросы</a>
+        <a href="#overview" data-nav="overview">Картина дела</a>
+        <a href="#finance" data-nav="finance">Деньги и документы</a>
+        <a href="#corrections" data-nav="corrections">Что нужно исправить</a>
+        <a href="#sources" data-nav="sources">Страницы источников</a>
+        <a href="#next" data-nav="next">Чего пока не хватает</a>
+        <a href="#downloads" data-nav="downloads">PDF и полные материалы</a>
+      </nav>
+      <div class="sidebar-note">Цитата ведёт к полной странице.<br>Номер страницы PDF и лист дела различаются.</div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <span class="top-label">Рабочая подборка</span>
+        <form id="search-form" role="search">
+          <label class="sr-only" for="global-search">Поиск по разбору, вопросам и цитатам</label>
+          <input id="global-search" type="search" placeholder="Найти человека, сумму или цитату…" autocomplete="off">
+          <button type="submit">Найти</button>
+        </form>
+      </header>
+      <main id="main" tabindex="-1"><p class="loading">Открываю материалы…</p></main>
+      <footer>Материалы для подготовки с представителем. Источники, версии участников и выводы разбора указаны отдельно.</footer>
+    </div>
+  </div>
+  <div id="source-backdrop" hidden></div>
+  <aside id="source-panel" class="source-panel" aria-label="Исходная страница" hidden>
+    <div class="source-header"><div><span class="eyebrow">Исходная страница</span><h2 id="source-title"></h2></div><button id="close-source" class="icon-button" aria-label="Закрыть исходную страницу">×</button></div>
+    <div class="source-tools"><a id="source-jpg" target="_blank" rel="noopener">Увеличить ↗</a><a id="source-pdf" target="_blank" rel="noopener">Открыть в PDF ↗</a><button id="copy-source">Скопировать ссылку</button></div>
+    <p id="source-locator"></p>
+    <div class="source-image-wrap"><img id="source-image" alt="" decoding="async"></div>
+    <p class="source-help">Можно увеличить изображение жестом или открыть PDF. Качество снимка сохранено.</p>
+  </aside>
+  <div id="toast" role="status" hidden></div>
+  <noscript>Для поиска и просмотра связанных страниц включите JavaScript. Полный разбор: <a href="assets/reports/analysis.pdf">открыть PDF</a>.</noscript>
+</body>
+</html>

@@ -116,3 +116,12 @@ For judicial analysis distinguish documented facts, exact quotes, interpretation
 conflicting sources and insufficient evidence. Cite volume, case sheet and document
 when known. Mark uncertain OCR. Never invent evidence or quotes. Send materials only
 through authorized model/tools and Telegram, not unrelated third-party services.
+
+Owner preference, 2026-11-12: when citing a case volume/page, also attach the actual
+corresponding page as a readable image or a separate PDF. For a set of citations,
+send a small PDF containing the relevant pages. Caption each page with volume,
+full-volume PDF page, local page within a split PDF, and verified case-sheet number
+if known; never infer a case-sheet number from PDF numbering. Preserve full-page
+context; a crop may supplement it. Reuse a previous attachment by referencing its
+message instead of repeatedly sending the same page. Keep originals unchanged and
+do not transmit credentials or other secrets visible on a page.

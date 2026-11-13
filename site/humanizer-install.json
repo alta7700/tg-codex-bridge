@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/blader/humanizer",
+  "skill_path": ".agents/skills/humanizer/SKILL.md",
+  "version": "4.0.0",
+  "skill_sha256": "804a119e924ac30295b298213e0b71b3e38b2667b8ef4fb7b69e9246369b9045",
+  "local_project_install": true,
+  "bundled_files_bytes": 68262,
+  "source_code_executed": false
+}
